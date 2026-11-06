@@ -1,0 +1,5 @@
+ui_print("PUBG Zygisk Suite");
+ui_print("Version 2.0.0");
+ui_print("by dj");
+ui_print("");
+ui_print("Extracting module...");

@@ -1,0 +1,18 @@
+#!/sbin/sh
+OUTFD=/proc/self/fd/$2
+ui_print() { echo -e "ui_print $1\n" > $OUTFD; }
+
+# Magisk update-binary stub for Zygisk modules
+ui_print "- Extracting module files..."
+
+# Standard Magisk module extraction
+unzip -o "$3" -d "$MODPATH" >&2
+
+# Set permissions
+set_perm_recursive "$MODPATH" 0 0 0755 0644
+set_perm "$MODPATH/customize.sh" 0 0 0755
+set_perm "$MODPATH/post-fs-data.sh" 0 0 0755 2>/dev/null || true
+set_perm "$MODPATH/service.sh" 0 0 0755 2>/dev/null || true
+
+ui_print "- Installation complete!"
+ui_print "- Reboot to activate the module."
