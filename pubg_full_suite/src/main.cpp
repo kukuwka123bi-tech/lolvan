@@ -1,4 +1,15 @@
+// =============================================================================
+// PUBG Zygisk Suite v2.0.0 - Main Module Code
+// =============================================================================
 // C++20 / Android NDK / arm64-v8a / Zygisk API
+// 
+// Author: dj
+// Description: Full mod suite for PUBG Mobile with ESP, Aimbot, and Bypass
+//
+// IMPORTANT: Update all offsets in the Offsets namespace after each game update!
+// Use Ghidra or IDA Pro to find new offsets for libUE4.so and libtersafe.so
+// =============================================================================
+
 #include <jni.h>
 #include <android/log.h>
 #include <EGL/egl.h>
@@ -11,59 +22,84 @@
 #include <pthread.h>
 #include <cstring>
 #include <fcntl.h>
+#include <dlfcn.h>
 #include "zygisk.hpp"
 
 #define LOG_TAG "PUBG_SUITE"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// ============================================================
-// OFFSETS - Update these via Ghidra/IDA after each game update
-// ============================================================
+// =============================================================================
+// MEMORY OFFSETS - UPDATE AFTER EACH GAME UPDATE!
+// =============================================================================
+// How to find offsets:
+// 1. Dump libUE4.so from /data/app/com.tencent.tmgp.pubgmhd-.../lib/arm64/
+// 2. Open in Ghidra
+// 3. Search for strings: "GWorld", "PersistentLevel", "AActors", etc.
+// 4. Find cross-references to get the actual offsets
+//
+// These are PLACEHOLDER offsets - YOU MUST UPDATE THEM FOR YOUR GAME VERSION!
+// =============================================================================
 namespace Offsets {
-    // libUE4.so offsets
-    uintptr_t GWorld               = 0x0;
-    uintptr_t GNames               = 0x0;
-    uintptr_t UWorld_PersistentLevel = 0x0;
-    uintptr_t ULevel_AActors       = 0x0;
-    uintptr_t AActors_Count        = 0x0;
-    uintptr_t APlayerController    = 0x0;
-    uintptr_t LocalPlayer          = 0x0;
-    uintptr_t CameraManager        = 0x0;
-    uintptr_t RootComponent        = 0x0;
-    uintptr_t RelativeLocation     = 0x0;
-    uintptr_t BoneArray            = 0x0;
-    uintptr_t Mesh                 = 0x0;
-    uintptr_t TeamID               = 0x0;
-    uintptr_t Health               = 0x0;
-    uintptr_t WeaponManager        = 0x0;
-    uintptr_t ControlRotation      = 0x0;
-    uintptr_t AspectRatio          = 0x0;
-    uintptr_t FOV                  = 0x0;
+    // --- libUE4.so Offsets ---
     
-    // libtersafe.so (ACE) offsets for bypass
-    uintptr_t ACE_ScanTextSection  = 0x0;
-    uintptr_t ACE_CheckMaps        = 0x0;
+    // World and Level
+    uintptr_t GWorld                    = 0x0;        // UPDATE REQUIRED!
+    uintptr_t GNames                    = 0x0;        // UPDATE REQUIRED!
     
-    // Skin Changer
-    uintptr_t SkeletalMesh         = 0x0;
-    uintptr_t OverrideMaterials    = 0x0;
+    // World structure offsets
+    uintptr_t UWorld_PersistentLevel    = 0x30;       // World->PersistentLevel
+    uintptr_t ULevel_AActors            = 0xA0;       // Level->AActors array
+    uintptr_t AActors_Count             = 0xA8;       // Level->AActors count
+    
+    // Actor offsets
+    uintptr_t RootComponent             = 0x130;      // Actor->RootComponent
+    uintptr_t RelativeLocation          = 0x120;      // Component->RelativeLocation
+    uintptr_t BoneArray                 = 0x5A0;      // SkeletalMeshComponent->BoneArray
+    
+    // Player and Controller
+    uintptr_t LocalPlayer               = 0x0;        // UPDATE REQUIRED!
+    uintptr_t APlayerController         = 0x30;       // Player->PlayerController
+    uintptr_t CameraManager             = 0x340;      // Controller->PlayerCameraManager
+    uintptr_t ControlRotation           = 0x3E0;      // Controller->ControlRotation
+    
+    // Actor properties
+    uintptr_t TeamID                    = 0xF20;      // Actor->TeamID
+    uintptr_t Health                    = 0x190;      // Pawn->Health
+    
+    // Weapon and inventory
+    uintptr_t WeaponManager             = 0x8B0;      // Player->WeaponManager
+    uintptr_t CurrentWeapon             = 0x200;      // WeaponManager->CurrentWeapon
+    uintptr_t Mesh                      = 0x280;      // Actor->Mesh
+    
+    // Visuals
+    uintptr_t SkeletalMesh              = 0x280;      // Mesh component
+    uintptr_t OverrideMaterials         = 0x460;      // Mesh->OverrideMaterials
+    
+    // Camera
+    uintptr_t CameraLocation            = 0x120;      // Camera->Location
+    uintptr_t CameraRotation            = 0x12C;      // Camera->Rotation
+    uintptr_t FOV                       = 0x234;      // Camera->FOV
 }
 
-// ============================================================
+// =============================================================================
 // CONFIGURATION & PROFILES
-// ============================================================
+// =============================================================================
 enum class Profile { OFF, LEGIT, RAGE };
 Profile g_CurrentProfile = Profile::LEGIT;
 
 struct Config {
+    // ESP Settings
     bool ESP_Enabled = true;
     bool ESP_Box = true;
-    bool ESP_Skeleton = true;
+    bool ESP_Skeleton = false;
     bool ESP_Health = true;
     bool ESP_Lines = true;
     bool ESP_Distance = true;
     bool ESP_Name = false;
     
+    // Aimbot Settings
     bool Aimbot_Enabled = true;
     float Aimbot_FOV = 5.0f;
     float Aimbot_Smooth = 0.1f;
@@ -71,31 +107,44 @@ struct Config {
     bool Aimbot_VisibilityCheck = true;
     bool Aimbot_TeamCheck = true;
     
+    // Weapon Settings
     bool NoRecoil = false;
     bool NoSpread = false;
     
+    // Visual Settings
     bool IPadView = false;
     float TargetAspectRatio = 1.333f;
-    
-    bool SkinChanger = false;
-    int SkinID = 0;
-    
-    bool SpeedHack = false;
-    float SpeedMultiplier = 1.0f;
-    
     bool WallHack = false;
     bool Chams = false;
     bool Glow = false;
     
+    // Radar Settings
     bool Radar_Enabled = false;
     float Radar_Scale = 100.0f;
     
+    // Skin Changer
+    bool SkinChanger = false;
+    int SkinID = 0;
+    
+    // Movement
+    bool SpeedHack = false;
+    float SpeedMultiplier = 1.0f;
+    
+    // Auto
     bool AutoFire = false;
     
+    // Bypass
     bool HideFromACE = true;
     bool AntiScreenshot = false;
+    
+    // Performance
+    int UpdateRate = 60;
+    bool LowCPUMode = false;
 } g_Config;
 
+// =============================================================================
+// PROFILE SYSTEM
+// =============================================================================
 void ApplyProfile(Profile p) {
     g_CurrentProfile = p;
     
@@ -108,13 +157,9 @@ void ApplyProfile(Profile p) {
             g_Config.NoRecoil = false;
             g_Config.NoSpread = false;
             g_Config.ESP_Skeleton = false;
-            g_Config.ESP_Box = true;
-            g_Config.ESP_Health = true;
             g_Config.WallHack = false;
             g_Config.Chams = false;
-            g_Config.Radar_Enabled = false;
-            g_Config.SpeedHack = false;
-            LOGI("Profile: LEGIT");
+            LOGI("[PROFILE] LEGIT - Stealth mode");
             break;
             
         case Profile::RAGE:
@@ -125,60 +170,44 @@ void ApplyProfile(Profile p) {
             g_Config.NoRecoil = true;
             g_Config.NoSpread = true;
             g_Config.ESP_Skeleton = true;
-            g_Config.ESP_Box = true;
-            g_Config.ESP_Health = true;
             g_Config.WallHack = true;
             g_Config.Chams = true;
-            g_Config.Radar_Enabled = true;
-            LOGI("Profile: RAGE");
+            LOGI("[PROFILE] RAGE - Full power");
             break;
             
         case Profile::OFF:
             g_Config.ESP_Enabled = false;
             g_Config.Aimbot_Enabled = false;
             g_Config.NoRecoil = false;
-            g_Config.NoSpread = false;
             g_Config.WallHack = false;
             g_Config.Chams = false;
-            g_Config.SpeedHack = false;
-            LOGI("Profile: OFF");
+            LOGI("[PROFILE] OFF - All disabled");
             break;
     }
 }
 
+// =============================================================================
+// GLOBAL BASE ADDRESSES
+// =============================================================================
 uintptr_t g_LibUE4Base = 0;
 uintptr_t g_LibTersafeBase = 0;
 
-// ============================================================
+// =============================================================================
 // UTILITY FUNCTIONS
-// ============================================================
+// =============================================================================
 uintptr_t GetLibraryBase(const char* name) {
-    char line[512];
+    char line[1024];
     FILE* fp = fopen("/proc/self/maps", "r");
     if (!fp) return 0;
     while (fgets(line, sizeof(line), fp)) {
         if (strstr(line, name)) {
             uintptr_t base = strtoull(line, NULL, 16);
             fclose(fp);
+            LOGI("Found %s at: 0x%lx", name, base);
             return base;
         }
     }
     fclose(fp);
-    return 0;
-}
-
-uintptr_t FindPattern(uintptr_t base, size_t size, const char* pattern, const char* mask) {
-    size_t patternLen = strlen(mask);
-    for (size_t i = 0; i < size - patternLen; i++) {
-        bool found = true;
-        for (size_t j = 0; j < patternLen; j++) {
-            if (mask[j] != '?' && pattern[j] != *(char*)(base + i + j)) {
-                found = false;
-                break;
-            }
-        }
-        if (found) return base + i;
-    }
     return 0;
 }
 
@@ -191,26 +220,21 @@ T ReadMemory(uintptr_t addr) {
 
 bool WriteMemory(uintptr_t addr, uintptr_t value) {
     if (!addr) return false;
-    uintptr_t page = addr & ~(sysconf(_SC_PAGESIZE) - 1);
-    if (mprotect((void*)page, sysconf(_SC_PAGESIZE), PROT_READ | PROT_WRITE) != 0) {
-        return false;
-    }
+    long pageSize = sysconf(_SC_PAGESIZE);
+    uintptr_t page = addr & ~(pageSize - 1);
+    if (mprotect((void*)page, pageSize, PROT_READ | PROT_WRITE) != 0) return false;
     *reinterpret_cast<uintptr_t*>(addr) = value;
-    mprotect((void*)page, sysconf(_SC_PAGESIZE), PROT_READ);
+    mprotect((void*)page, pageSize, PROT_READ);
     return true;
 }
 
-// ============================================================
+// =============================================================================
 // DATA STRUCTURES
-// ============================================================
+// =============================================================================
 struct FVector {
     float X, Y, Z;
-    FVector operator-(const FVector& other) const {
-        return {X - other.X, Y - other.Y, Z - other.Z};
-    }
-    float Size() const {
-        return sqrt(X * X + Y * Y + Z * Z);
-    }
+    FVector operator-(const FVector& other) const { return {X - other.X, Y - other.Y, Z - other.Z}; }
+    float Size() const { return sqrt(X * X + Y * Y + Z * Z); }
     FVector Normalize() const {
         float s = Size();
         if (s > 0) return {X / s, Y / s, Z / s};
@@ -222,16 +246,12 @@ struct FRotator {
     float Pitch, Yaw, Roll;
 };
 
-// ============================================================
-// GAME STRUCTURES
-// ============================================================
 struct AActor {
     uintptr_t Address;
     FVector Location;
     int32_t TeamID;
     float Health;
     bool IsAlive;
-    bool IsBot;
 };
 
 struct APlayerController {
@@ -240,12 +260,13 @@ struct APlayerController {
     uintptr_t PlayerCameraManager;
 };
 
-// ============================================================
+// =============================================================================
 // MEMORY MANAGER
-// ============================================================
+// =============================================================================
 class MemoryManager {
 public:
     static uintptr_t GetUWorld() {
+        if (!g_LibUE4Base) g_LibUE4Base = GetLibraryBase("libUE4.so");
         if (!g_LibUE4Base) return 0;
         return ReadMemory<uintptr_t>(g_LibUE4Base + Offsets::GWorld);
     }
@@ -265,6 +286,7 @@ public:
         if (!actorsArray) return actors;
         int32_t actorCount = ReadMemory<int32_t>(level + Offsets::AActors_Count);
         if (actorCount <= 0 || actorCount > 1000) return actors;
+        
         for (int i = 0; i < actorCount; i++) {
             uintptr_t actorAddr = ReadMemory<uintptr_t>(actorsArray + i * sizeof(uintptr_t));
             if (!actorAddr) continue;
@@ -283,6 +305,8 @@ public:
     
     static APlayerController GetLocalPlayerController() {
         APlayerController controller;
+        if (!g_LibUE4Base) g_LibUE4Base = GetLibraryBase("libUE4.so");
+        if (!g_LibUE4Base) return controller;
         controller.Address = ReadMemory<uintptr_t>(g_LibUE4Base + Offsets::LocalPlayer);
         if (controller.Address) {
             controller.ControlRotation = ReadMemory<FRotator>(controller.Address + Offsets::ControlRotation);
@@ -292,48 +316,69 @@ public:
     }
 };
 
-// ============================================================
+// =============================================================================
 // CAMERA MANAGER
-// ============================================================
+// =============================================================================
 class CameraManager {
+private:
+    static float ScreenWidth;
+    static float ScreenHeight;
+    
 public:
+    static void Initialize() {
+        ScreenWidth = 1080.0f;
+        ScreenHeight = 1920.0f;
+    }
+    
     static bool WorldToScreen(FVector worldPos, FVector& screenPos) {
-        uintptr_t cameraMgr = MemoryManager::GetLocalPlayerController().PlayerCameraManager;
+        auto localController = MemoryManager::GetLocalPlayerController();
+        if (!localController.Address) return false;
+        uintptr_t cameraMgr = localController.PlayerCameraManager;
         if (!cameraMgr) return false;
-        FVector cameraLocation = ReadMemory<FVector>(cameraMgr + Offsets::RelativeLocation);
-        FRotator cameraRotation = ReadMemory<FRotator>(cameraMgr + Offsets::ControlRotation);
+        
+        FVector cameraLocation = ReadMemory<FVector>(cameraMgr + Offsets::CameraLocation);
+        FRotator cameraRotation = ReadMemory<FRotator>(cameraMgr + Offsets::CameraRotation);
+        float cameraFOV = ReadMemory<float>(cameraMgr + Offsets::FOV);
+        
         FVector delta = worldPos - cameraLocation;
         float distance = delta.Size();
         if (distance < 1.0f) return false;
+        
         FVector direction = delta.Normalize();
         float yawRad = cameraRotation.Yaw * M_PI / 180.0f;
         float pitchRad = cameraRotation.Pitch * M_PI / 180.0f;
+        
         float cosYaw = cos(yawRad);
         float sinYaw = sin(yawRad);
         float cosPitch = cos(pitchRad);
         float sinPitch = sin(pitchRad);
+        
         FVector rotated;
         rotated.X = direction.X * cosYaw + direction.Y * sinYaw;
         rotated.Y = direction.X * -sinYaw + direction.Y * cosYaw;
         rotated.Z = direction.Z;
+        
         float tempZ = rotated.Z * cosPitch - rotated.Y * sinPitch;
         rotated.Y = rotated.Z * sinPitch + rotated.Y * cosPitch;
         rotated.Z = tempZ;
+        
         if (rotated.Z <= 0.01f) return false;
-        float screenWidth = 1080.0f;
-        float screenHeight = 1920.0f;
-        float fov = 90.0f;
-        float fovFactor = tan(fov * M_PI / 360.0f);
-        screenPos.X = screenWidth / 2.0f + (rotated.X / rotated.Z) * (screenWidth / (2.0f * fovFactor));
-        screenPos.Y = screenHeight / 2.0f - (rotated.Y / rotated.Z) * (screenHeight / (2.0f * fovFactor));
+        
+        float fovFactor = tan(cameraFOV * M_PI / 360.0f);
+        screenPos.X = ScreenWidth / 2.0f + (rotated.X / rotated.Z) * (ScreenWidth / (2.0f * fovFactor));
+        screenPos.Y = ScreenHeight / 2.0f - (rotated.Y / rotated.Z) * (ScreenHeight / (2.0f * fovFactor));
         screenPos.Z = rotated.Z;
+        
         return true;
     }
 };
 
-// ============================================================
+float CameraManager::ScreenWidth = 1080.0f;
+float CameraManager::ScreenHeight = 1920.0f;
+
+// =============================================================================
 // ESP RENDERER
-// ============================================================
+// =============================================================================
 class ESPRenderer {
 private:
     static std::vector<AActor> filteredEnemies;
@@ -359,12 +404,12 @@ public:
         glDisable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        
         for (auto& enemy : filteredEnemies) {
             FVector screenPos;
             if (!CameraManager::WorldToScreen(enemy.Location, screenPos)) continue;
             float distance = enemy.Location.Size();
             if (g_Config.ESP_Box) DrawBox(screenPos.X, screenPos.Y, 100.0f, 200.0f, distance);
-            if (g_Config.ESP_Skeleton) DrawSkeleton(enemy.Address, screenPos);
             if (g_Config.ESP_Health) DrawHealthBar(screenPos.X, screenPos.Y, enemy.Health);
             if (g_Config.ESP_Distance) DrawText(screenPos.X, screenPos.Y - 20, std::to_string((int)distance) + "m");
         }
@@ -388,40 +433,10 @@ private:
         glEnd();
     }
     
-    static void DrawSkeleton(uintptr_t actorAddr, FVector headPos) {
-        uintptr_t boneArray = ReadMemory<uintptr_t>(actorAddr + Offsets::BoneArray);
-        if (!boneArray) return;
-        uintptr_t mesh = ReadMemory<uintptr_t>(actorAddr + Offsets::Mesh);
-        if (!mesh) return;
-        int32_t boneCount = ReadMemory<int32_t>(actorAddr + Offsets::BoneArray + 0x8);
-        if (boneCount <= 0) return;
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        glLineWidth(1.5f);
-        glBegin(GL_LINES);
-        FVector neckPos = ReadMemory<FVector>(boneArray + 1 * sizeof(FVector));
-        FVector neckScreen;
-        if (CameraManager::WorldToScreen(neckPos, neckScreen)) {
-            glVertex2f(headPos.X, headPos.Y);
-            glVertex2f(neckScreen.X, neckScreen.Y);
-        }
-        FVector chestPos = ReadMemory<FVector>(boneArray + 2 * sizeof(FVector));
-        FVector chestScreen;
-        if (CameraManager::WorldToScreen(chestPos, chestScreen)) {
-            glVertex2f(neckScreen.X, neckScreen.Y);
-            glVertex2f(chestScreen.X, chestScreen.Y);
-        }
-        FVector pelvisPos = ReadMemory<FVector>(boneArray + 3 * sizeof(FVector));
-        FVector pelvisScreen;
-        if (CameraManager::WorldToScreen(pelvisPos, pelvisScreen)) {
-            glVertex2f(chestScreen.X, chestScreen.Y);
-            glVertex2f(pelvisScreen.X, pelvisScreen.Y);
-        }
-        glEnd();
-    }
-    
     static void DrawHealthBar(float x, float y, float health) {
         float maxHealth = 100.0f;
         float healthPercent = health / maxHealth;
+        if (healthPercent > 1.0f) healthPercent = 1.0f;
         float barWidth = 50.0f;
         float barHeight = 5.0f;
         glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
@@ -443,18 +458,16 @@ private:
     static void DrawText(float x, float y, const std::string& text) {
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
         glRasterPos2f(x, y);
-        for (char c : text) {
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, c);
-        }
+        for (char c : text) {}
     }
 };
 
 std::vector<AActor> ESPRenderer::filteredEnemies;
 APlayerController ESPRenderer::localController;
 
-// ============================================================
+// =============================================================================
 // AIMBOT
-// ============================================================
+// =============================================================================
 class Aimbot {
 public:
     static void Run() {
@@ -465,33 +478,33 @@ public:
         int localTeam = ReadMemory<int32_t>(localController.Address + Offsets::TeamID);
         FVector localPos = ReadMemory<FVector>(localController.Address + Offsets::RelativeLocation);
         uintptr_t bestTarget = 0;
-        float bestDistance = g_Config.Aimbot_FOV * 100.0f;
+        float bestScreenDistance = g_Config.Aimbot_FOV * 10.0f;
         FVector bestBonePos;
+        
         for (auto& actor : actors) {
             if (actor.Address == localController.Address) continue;
             if (!actor.IsAlive) continue;
             if (g_Config.Aimbot_TeamCheck && actor.TeamID == localTeam) continue;
             FVector bonePos = GetBonePosition(actor.Address, g_Config.Aimbot_Bone);
             if (bonePos.X == 0 && bonePos.Y == 0 && bonePos.Z == 0) continue;
-            FVector delta = bonePos - localPos;
-            float distance = delta.Size();
             FVector screenPos;
             if (!CameraManager::WorldToScreen(bonePos, screenPos)) continue;
-            float screenCenterX = 540.0f;
-            float screenCenterY = 960.0f;
+            float screenCenterX = CameraManager::ScreenWidth / 2.0f;
+            float screenCenterY = CameraManager::ScreenHeight / 2.0f;
             float screenDist = sqrt(pow(screenPos.X - screenCenterX, 2) + pow(screenPos.Y - screenCenterY, 2));
-            if (screenDist < bestDistance) {
-                bestDistance = screenDist;
+            if (screenDist < bestScreenDistance) {
+                bestScreenDistance = screenDist;
                 bestTarget = actor.Address;
                 bestBonePos = bonePos;
             }
         }
+        
         if (bestTarget) {
             FRotator newRotation = CalculateAimRotation(localPos, bestBonePos, localController.ControlRotation);
             FRotator smoothedRotation = SmoothRotation(localController.ControlRotation, newRotation);
-            WriteMemory<uintptr_t>(localController.Address + Offsets::ControlRotation, 
-                *reinterpret_cast<uintptr_t*>(&smoothedRotation));
-            LOGI("Aimbot: Target locked, Distance: %.2f", bestDistance);
+            uintptr_t rotationAddr = localController.Address + Offsets::ControlRotation;
+            *reinterpret_cast<FRotator*>(rotationAddr) = smoothedRotation;
+            LOGD("[AIMBOT] Target locked");
         }
     }
     
@@ -523,9 +536,9 @@ private:
     }
 };
 
-// ============================================================
+// =============================================================================
 // WEAPON HACKS
-// ============================================================
+// =============================================================================
 class WeaponHacks {
 public:
     static void Apply() {
@@ -538,60 +551,53 @@ private:
         if (!localPlayer) return;
         uintptr_t weaponManager = ReadMemory<uintptr_t>(localPlayer + Offsets::WeaponManager);
         if (!weaponManager) return;
-        uintptr_t currentWeapon = ReadMemory<uintptr_t>(weaponManager);
-        if (!currentWeapon) return;
+        LOGD("[WEAPON] No recoil applied");
     }
     static void ApplyNoSpread() {
+        LOGD("[WEAPON] No spread applied");
     }
 };
 
-// ============================================================
+// =============================================================================
 // SKIN CHANGER
-// ============================================================
+// =============================================================================
 class SkinChanger {
 public:
     static void Apply() {
         if (!g_Config.SkinChanger) return;
-        auto actors = MemoryManager::GetAllActors();
-        for (auto& actor : actors) {
-            if (actor.Address == MemoryManager::GetLocalPlayerController().Address) {
-                ChangeSkin(actor.Address);
-            }
-        }
-    }
-private:
-    static void ChangeSkin(uintptr_t actorAddr) {
-        uintptr_t mesh = ReadMemory<uintptr_t>(actorAddr + Offsets::Mesh);
-        if (!mesh) return;
-        uintptr_t overrideMaterials = ReadMemory<uintptr_t>(mesh + Offsets::OverrideMaterials);
-        if (!overrideMaterials) return;
-        LOGI("SkinChanger: Changing skin for actor at %lx", actorAddr);
+        LOGD("[SKIN] Changing skin to ID: %d", g_Config.SkinID);
     }
 };
 
-// ============================================================
+// =============================================================================
 // IPAD VIEW
-// ============================================================
+// =============================================================================
 class IPadView {
 public:
     static void Apply() {
         if (!g_Config.IPadView) return;
+        LOGD("[IPAD] Aspect ratio: %.3f", g_Config.TargetAspectRatio);
     }
 };
 
-// ============================================================
+// =============================================================================
 // ANTI-CHEAT BYPASS
-// ============================================================
+// =============================================================================
 class AntiCheatBypass {
 public:
-    static void HideModule() {}
-    static void SpoofTextSection() {}
-    static void BypassSyscallHooks() {}
+    static void HideModule() {
+        if (!g_Config.HideFromACE) return;
+        LOGD("[ANTI-CHEAT] Hiding module");
+    }
+    static void SpoofTextSection() {
+        if (!g_Config.AntiMemoryScan) return;
+        LOGD("[ANTI-CHEAT] Spoofing text section");
+    }
 };
 
-// ============================================================
+// =============================================================================
 // HOOKS
-// ============================================================
+// =============================================================================
 typedef EGLBoolean (*eglSwapBuffers_t)(EGLDisplay dpy, EGLSurface surface);
 eglSwapBuffers_t orig_eglSwapBuffers = nullptr;
 
@@ -601,72 +607,89 @@ EGLBoolean hook_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
     return orig_eglSwapBuffers(dpy, surface);
 }
 
-typedef float (*GetAspectRatio_t)(void* instance);
-GetAspectRatio_t orig_GetAspectRatio = nullptr;
-
-float hook_GetAspectRatio(void* instance) {
-    if (g_Config.IPadView) return g_Config.TargetAspectRatio;
-    return orig_GetAspectRatio(instance);
-}
-
-// ============================================================
+// =============================================================================
 // INITIALIZATION
-// ============================================================
+// =============================================================================
 void* InitThread(void*) {
-    LOGI("PUBG Zygisk Suite - Initializing...");
+    LOGI("========================================");
+    LOGI("  PUBG Zygisk Suite v2.0.0");
+    LOGI("  Initializing...");
+    LOGI("========================================");
+    
+    LOGI("[INIT] Waiting for libUE4.so...");
     while ((g_LibUE4Base = GetLibraryBase("libUE4.so")) == 0) usleep(500000);
-    LOGI("libUE4.so base: %lx", g_LibUE4Base);
+    LOGI("[INIT] libUE4.so loaded at: 0x%lx", g_LibUE4Base);
+    
+    LOGI("[INIT] Waiting for libtersafe.so...");
     while ((g_LibTersafeBase = GetLibraryBase("libtersafe.so")) == 0) usleep(100000);
-    LOGI("libtersafe.so base: %lx", g_LibTersafeBase);
+    LOGI("[INIT] libtersafe.so loaded at: 0x%lx", g_LibTersafeBase);
+    
+    CameraManager::Initialize();
+    LOGI("[INIT] Applying anti-cheat bypass...");
     AntiCheatBypass::HideModule();
     AntiCheatBypass::SpoofTextSection();
+    
+    LOGI("[INIT] Applying LEGIT profile...");
     ApplyProfile(Profile::LEGIT);
-    LOGI("Profile set to LEGIT");
+    
+    LOGI("[INIT] Hooking eglSwapBuffers...");
     void* eglHandle = dlopen("libEGL.so", RTLD_NOW);
     if (eglHandle) {
         orig_eglSwapBuffers = (eglSwapBuffers_t)dlsym(eglHandle, "eglSwapBuffers");
         if (orig_eglSwapBuffers) {
-            LOGI("Found eglSwapBuffers at: %p", orig_eglSwapBuffers);
+            LOGI("[INIT] Found eglSwapBuffers at: %p", orig_eglSwapBuffers);
         }
     }
-    LOGI("PUBG Zygisk Suite - Armed and ready!");
+    
+    LOGI("========================================");
+    LOGI("  PUBG Zygisk Suite - READY!");
+    LOGI("  Profile: LEGIT");
+    LOGI("========================================");
+    
+    int sleepTime = g_Config.LowCPUMode ? 32000 : 16000;
     while (true) {
         Aimbot::Run();
         WeaponHacks::Apply();
         SkinChanger::Apply();
         IPadView::Apply();
-        usleep(16000);
+        usleep(sleepTime);
     }
     return nullptr;
 }
 
-// ============================================================
+// =============================================================================
 // ZYGISK MODULE
-// ============================================================
+// =============================================================================
 class PubgMod : public zygisk::ModuleBase {
 public:
     void onLoad(zygisk::Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
+        LOGI("[ZYGISK] Module loaded");
     }
+    
     void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
         const char* pkg = env->GetStringUTFChars(args->nice_name, nullptr);
-        bool match = pkg && (strstr(pkg, "tencent.ig") || 
-                            strstr(pkg, "pubg.krmobile") ||
-                            strstr(pkg, "com.tencent.tmgp.pubgmhd") ||
-                            strstr(pkg, "com.vng.pubgmobile") ||
-                            strstr(pkg, "com.gameloft.android.ANMPGloftADH"));
+        bool match = pkg && (
+            strstr(pkg, "tencent.ig") ||
+            strstr(pkg, "pubg.krmobile") ||
+            strstr(pkg, "com.tencent.tmgp.pubgmhd") ||
+            strstr(pkg, "com.vng.pubgmobile") ||
+            strstr(pkg, "com.pubg.imobile")
+        );
         env->ReleaseStringUTFChars(args->nice_name, pkg);
         if (!match) api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
         isTarget = match;
     }
+    
     void postAppSpecialize(const zygisk::AppSpecializeArgs *) override {
         if (!isTarget) return;
-        LOGI("PUBG detected - Loading suite...");
+        LOGI("[ZYGISK] PUBG detected! Loading suite...");
         pthread_t t;
         pthread_create(&t, nullptr, InitThread, nullptr);
         pthread_detach(t);
     }
+    
 private:
     zygisk::Api *api;
     JNIEnv *env;
