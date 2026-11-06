@@ -1,195 +1,173 @@
 # PUBG Zygisk Suite v2.0.0
 
-**Full Zygisk mod suite for PUBG Mobile with ESP, Aimbot, Skin Changer, and Anti-Cheat Bypass**
+**🎮 Полноценный Zygisk модуль для PUBG Mobile с ESP, Aimbot, Skin Changer и Anti-Cheat Bypass**
 
 ---
 
-## 📥 Download
+## 📥 СКАЧАТЬ ГОТОВЫЙ МОДУЛЬ
 
-### Option 1: Download ZIP
-[**Download Module ZIP**](https://github.com/kukuwka123bi-tech/lolvan/archive/refs/heads/pubg-module.zip)
+### 🔗 **Прямая ссылка:**
+**[СКАЧАТЬ PUBG Zygisk Suite](https://github.com/kukuwka123bi-tech/lolvan/archive/refs/heads/pubg-module.zip)**
 
-Then extract and use the `pubg_full_suite` folder.
+---
 
-### Option 2: Clone Repository
+## 🚀 БЫСТРЫЙ СТАРТ (для Android с root)
+
+**Если у тебя Android с root, выполни эти команды в Termux:**
+
 ```bash
+cd ~
 git clone https://github.com/kukuwka123bi-tech/lolvan.git
-cd lolvan
-git checkout pubg-module
+cd lolvan/pubg_full_suite
+chmod +x INSTALL.sh
+./INSTALL.sh
 ```
 
+**Затем выбери опцию 1 и следуй инструкциям!**
+
 ---
 
-## 📦 Module Structure
+## 📁 СТРУКТУРА МОДУЛЯ
 
 ```
 pubg_full_suite/
-├── module.prop              # Module metadata
-├── customize.sh            # Install script
-├── post-fs-data.sh         # Post-fs-data script
-├── service.sh              # Service script
-├── uninstall.sh            # Uninstall script
-├── config.json             # Configuration
-├── BUILD.md                # Build instructions
-├── README.md               # This file
-├── META-INF/
+├── INSTALL.sh              # 🎯 ОСНОВНОЙ СКРИПТ (запускай этот!)
+├── setup-termux.sh         # Установка Termux
+├── build-module.sh         # Сборка модуля
+├── TERMUX-GUIDE.md         # Руководство по Termux
+├── module.prop             # Методанные модуля
+├── customize.sh            # Скрипт установки
+├── post-fs-data.sh         # Скрипт после монтирования
+├── service.sh              # Сервисный скрипт
+├── uninstall.sh            # Скрипт удаления
+├── config.json             # Конфигурация
+├── BUILD.md                # Руководство по сборке
+├── META-INF/               # Magisk файлы
 │   └── com/google/android/
-│       ├── update-binary  # Magisk update script
+│       ├── update-binary
 │       └── updater-script
 ├── zygisk/
-│   ├── arm64-v8a.so        # Compiled library (PLACEHOLDER - build it!)
-│   └── zygisk.hpp          # Zygisk API header
+│   ├── arm64-v8a.so        # ⚠️ Заглушка (нужно скомпилировать!)
+│   └── zygisk.hpp          # Zygisk API
 └── src/
-    ├── main.cpp            # Main module code
-    └── CMakeLists.txt      # CMake build config
+    ├── main.cpp            # ✅ Основной код
+    └── CMakeLists.txt      # Конфигурация сборки
 ```
 
 ---
 
-## ⚡ Quick Install
+## 🎯 ЧТО УМЕЕТ МОДУЛЬ
 
-### 1. Build the Library
+### ✅ ESP (Экранный радар)
+- Box - Рамка вокруг врагов
+- Health Bar - Полоска здоровья
+- Distance - Дистанция до врага
+- Skeleton - Скелет врагов
 
+### ✅ Aimbot (Автонаведение)
+- FOV: 1-180°
+- Сглаживание: 0.01-1.0
+- Выбор кости: Голова/Грудь/Таз/Ближайшая
+- Проверка видимости
+- Игнорирование союзников
+
+### ✅ Профили
+| Профиль | FOV | Сглаживание | Кость | No Recoil | Wallhack |
+|---------|-----|-------------|-------|-----------|----------|
+| **LEGIT** | 3° | 0.08 | Грудь | ❌ | ❌ |
+| **RAGE** | 180° | 1.0 | Голова | ✅ | ✅ |
+| **OFF** | - | - | - | ❌ | ❌ |
+
+### ✅ Оружейные хаки
+- No Recoil - Нет отдачи
+- No Spread - Нет разброса
+
+### ✅ Визуальные хаки
+- iPad View - Соотношение сторон 4:3
+- Wallhack - Видение через стены
+- Chams - Окраска моделей
+- Glow - Свечение врагов
+
+### ✅ Прочее
+- Radar - Минимап
+- Skin Changer - Смена скинов
+- Speed Hack - Ускорение
+
+---
+
+## 📱 УСТАНОВКА
+
+### 🎯 Способ 1: Через Termux (РЕКОМЕНДУЮ)
+
+1. Установи **Termux** из F-Droid: [Скачать](https://f-droid.org/en/packages/com.termux/)
+2. Открой Termux и выполни:
 ```bash
-# Navigate to src directory
-cd pubg_full_suite/src
-
-# Create build directory
-mkdir build && cd build
-
-# Build with CMake
-cmake .. \
-  -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=arm64-v8a \
-  -DANDROID_PLATFORM=android-26 \
-  -DANDROID_STL=c++_static
-
-# Compile
-make -j$(nproc)
-
-# Copy library to module
-cp libpubg_suite.so ../../zygisk/arm64-v8a.so
+cd ~
+git clone https://github.com/kukuwka123bi-tech/lolvan.git
+cd lolvan/pubg_full_suite
+chmod +x INSTALL.sh
+./INSTALL.sh
 ```
+3. Выбери **опцию 1** (Full Setup + Compile + Install)
+4. Дождись окончания установки (~10 минут)
+5. Скопруй `pubg_full_suite.zip` в `/sdcard/Download/`
+6. Установи через Magisk
 
-### 2. Create Module ZIP
+### 📦 Способ 2: На ПК
 
-```bash
-# From pubg_full_suite directory
-cd ..
-zip -r pubg_full_suite.zip pubg_full_suite -x "pubg_full_suite/src/build/*"
-```
-
-### 3. Install via Magisk
-
-1. Open Magisk app
-2. Go to **Modules**
-3. Tap **Install from storage**
-4. Select `pubg_full_suite.zip`
-5. **Reboot your device**
-6. Enable **Zygisk** in Magisk settings
+1. Скачай архив: [СКАЧАТЬ](https://github.com/kukuwka123bi-tech/lolvan/archive/refs/heads/pubg-module.zip)
+2. Разархивируй
+3. Скомпилируй библиотеку (см. BUILD.md)
+4. Создай ZIP для Magisk
+5. Установи через Magisk
 
 ---
 
-## 🎯 Features
+## ⚠️ ВАЖНО! ОФФСЕТЫ!
 
-### ESP
-- ✅ Box
-- ✅ Skeleton
-- ✅ Health Bar
-- ✅ Distance
-- ✅ Name
+**⚠️ ОБЯЗАТЕЛЬНО ОБНОВИ ОФФСЕТЫ ПЕРЕД ИСПОЛЬЗОВАНИЕМ!**
 
-### Aimbot
-- ✅ FOV: 1-180°
-- ✅ Smoothing: 0.01-1.0
-- ✅ Bone selection (Head, Chest, Pelvis, Nearest)
-- ✅ Visibility check
-- ✅ Team check
-
-### Profiles
-- **LEGIT**: Stealth mode (3° FOV, 0.08 smooth, chest aim)
-- **RAGE**: Full power (180° FOV, instant, head aim)
-- **OFF**: All features disabled
-
-### Weapon
-- ✅ No Recoil
-- ✅ No Spread
-
-### Visuals
-- ✅ iPad View (4:3 aspect ratio)
-- ✅ Wallhack
-- ✅ Chams
-- ✅ Glow
-
-### Other
-- ✅ Radar
-- ✅ Skin Changer
-- ✅ Speed Hack
-- ✅ Auto Fire
-
----
-
-## ⚠️ Important Notes
-
-### 1. Update Offsets
-After each game update, you **MUST** update memory offsets in `src/main.cpp`:
-
+В файле `src/main.cpp`:
 ```cpp
 namespace Offsets {
-    uintptr_t GWorld               = 0x12345678;  // UPDATE!
-    uintptr_t GNames               = 0x87654321;  // UPDATE!
-    // ... all other offsets
+    uintptr_t GWorld                    = 0x0;        // ❌ НУЖНО ОБНОВИТЬ!
+    uintptr_t GNames                    = 0x0;        // ❌ НУЖНО ОБНОВИТЬ!
+    // ... другие оффсеты
 }
 ```
 
-Use **Ghidra** or **IDA Pro** to find new offsets.
-
-### 2. Enable Zygisk
-1. Open Magisk app
-2. Settings → Enable **Zygisk**
-3. Reboot
-
-### 3. Game Packages
-Module automatically detects:
-- `com.tencent.tmgp.pubgmhd` (Global)
-- `pubg.krmobile` (Korea)
-- `com.vng.pubgmobile` (Vietnam)
-- `com.tencent.ig` (China)
-- `com.pubg.imobile` (BGMI)
+**Как найти оффсеты:**
+1. Сделай дамп `libUE4.so` из игры
+2. Открой в **Ghidra**
+3. Найди оффсеты для всех переменных
+4. Обнови их в `main.cpp`
+5. Пересобери модуль
 
 ---
 
-## 🛡️ Anti-Cheat Bypass
+## 🎮 СОВМЕСТИМОСТЬ
 
-The module includes:
-- Module hiding from `/proc/self/maps`
-- Text section CRC spoofing
-- Syscall hook bypass
-
-**Recommendations:**
-- Use LEGIT profile for safety
-- Don't use RAGE mode continuously
-- Keep offsets updated
-- Use on clean device
+✅ PUBG Mobile Global - `com.tencent.tmgp.pubgmhd`
+✅ PUBG Mobile KR - `pubg.krmobile`
+✅ PUBG Mobile VN - `com.vng.pubgmobile`
+✅ PUBG Mobile CN - `com.tencent.ig`
+✅ BGMI - `com.pubg.imobile`
 
 ---
 
-## 📚 Full Documentation
+## 📚 ДОКУМЕНТАЦИЯ
 
-See [BUILD.md](BUILD.md) for detailed build and configuration instructions.
-
----
-
-## 🤝 Support
-
-For issues or questions, check the documentation or create an issue in the repository.
+- **[TERMUX-GUIDE.md](TERMUX-GUIDE.md)** - Подробное руководство
+- **[BUILD.md](BUILD.md)** - Сборка и конфигурация
 
 ---
 
-**⚠️ Legal Disclaimer:**
+## ⚠️ ПРАВОВОЕ ПРЕДУПРЕЖДЕНИЕ
 
-THIS MODULE IS FOR EDUCATIONAL PURPOSES ONLY.
-- Use at your own risk
-- Developer is not responsible for any bans
-- Do not use in competitive matches
-- Respect the game's terms of service
+**ТОЛЬКО ДЛЯ ОЗНАКОМИТЕЛЬНЫХ ЦЕЛЕЙ!**
+- Используй на свой страх и риск
+- Разработчик не несет ответственности за бан
+
+---
+
+**🎉 ВСЁ ГОТОВО!** 🎮
